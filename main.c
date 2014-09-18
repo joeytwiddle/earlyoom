@@ -28,6 +28,11 @@ static unsigned long get_kb_avail(void)
 	return kb_main_free + kb_main_buffers + kb_main_cached;
 }
 
+static unsigned long get_kb_swap_avail(void)
+{
+	return kb_swap_free + kb_swap_cached;
+}
+
 static int isnumeric(char* str)
 {
 	int i=0;
@@ -164,7 +169,7 @@ void handle_oom(DIR * procdir, int sig)
 
 int main(int argc, char *argv[])
 {
-	unsigned long kb_avail, kb_min, oom_cnt=0;
+	unsigned long kb_avail, kb_min, kb_swap_avail, oom_cnt=0;
 
 	/* To be able to observe in real time what is happening when the
 	 * output is redirected we have to explicitely request line
@@ -187,11 +192,13 @@ int main(int argc, char *argv[])
 	}
 
 	kb_avail = get_kb_avail();
+	kb_swap_avail = get_kb_swap_avail();
 	kb_min = kb_main_total/100*MIN_AVAIL_PERCENT;
 
 	fprintf(stderr, "total: %5lu MiB\n", kb_main_total/1024);
 	fprintf(stderr, "min:   %5lu MiB\n", kb_min/1024);
 	fprintf(stderr, "avail: %5lu MiB\n", kb_avail/1024);
+	fprintf(stderr, "swap:  %5lu MiB\n", kb_swap_avail/1024);
 
 	/* Dry-run oom kill to make sure stack grows to maximum size before
 	 * calling mlockall()
@@ -208,10 +215,11 @@ int main(int argc, char *argv[])
 	while(1)
 	{
 		kb_avail = get_kb_avail();
+		kb_swap_avail = get_kb_swap_avail();
 
 		if(c % 10 == 0)
 		{
-			printf("avail: %5lu MiB\n", kb_avail/1024);
+			printf("avail: %5lu MiB swap: %5lu MiB\n", kb_avail/1024, kb_swap_avail/1024);
 			/*printf("kb_main_free: %lu kb_main_buffers: %lu kb_main_cached: %lu kb_main_shared: %lu\n",
 				kb_main_free, kb_main_buffers, kb_main_cached, kb_main_shared);
 			*/
@@ -219,10 +227,10 @@ int main(int argc, char *argv[])
 		}
 		c++;
 
-		if(kb_avail < kb_min)
+		if(kb_avail < kb_min && kb_swap_avail < kb_min)
 		{
-			fprintf(stderr, "Out of memory! avail: %lu MiB < min: %lu MiB\n",
-				kb_avail/1024, kb_min/1024);
+			fprintf(stderr, "Out of memory! avail: %lu MiB and swap: %lu MiB < min: %lu MiB\n",
+				kb_avail/1024, kb_swap_avail/1024, kb_min/1024);
 			handle_oom(procdir, 9);
 			oom_cnt++;
 		}
