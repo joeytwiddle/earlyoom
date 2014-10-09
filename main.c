@@ -30,7 +30,10 @@ static unsigned long get_kb_avail(void)
 
 static unsigned long get_kb_swap_avail(void)
 {
-	return kb_swap_free + kb_swap_cached;
+	// Assumes meminfo() was called recently!
+	// Please please uncomment this if you decide to *only* use the swap reading.
+	//meminfo();
+	return kb_swap_free /* + kb_swap_cached */;
 }
 
 static int isnumeric(char* str)
@@ -227,9 +230,10 @@ int main(int argc, char *argv[])
 		}
 		c++;
 
-		if(kb_avail < kb_min && kb_swap_avail < kb_min)
+		//if(kb_avail < kb_min && kb_swap_avail < kb_min)
+		if(kb_avail + kb_swap_avail < 2 * kb_min)
 		{
-			fprintf(stderr, "Out of memory! avail: %lu MiB and swap: %lu MiB < min: %lu MiB\n",
+			fprintf(stderr, "Out of memory! avail: %lu MiB + swap: %lu MiB < 2 x min: %lu MiB\n",
 				kb_avail/1024, kb_swap_avail/1024, kb_min/1024);
 			handle_oom(procdir, 9);
 			oom_cnt++;
