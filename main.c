@@ -1,6 +1,6 @@
 /* If the available memory goes below this percentage, we start killing
  * processes. 10 is a good start. */
-#define MIN_AVAIL_PERCENT 10
+#define MIN_AVAIL_PERCENT 15
 
 #include <stdio.h>
 #include <fcntl.h>
