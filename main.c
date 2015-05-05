@@ -237,6 +237,8 @@ int main(int argc, char *argv[])
 				kb_avail/1024, kb_swap_avail/1024, kb_min/1024);
 			handle_oom(procdir, 9);
 			oom_cnt++;
+			// On one occasion, kill_by_rss was called three times, on three different processes, when only the first really needed to be killed.
+			usleep(10*1000*1000); // 10 seconds
 		}
 		
 		usleep(100000); // 100ms
