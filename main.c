@@ -17,6 +17,7 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <sys/mman.h>
+#include <time.h>
 
 #include "sysinfo.h"
 
@@ -166,6 +167,11 @@ int main(int argc, char *argv[])
 {
 	unsigned long kb_avail, kb_min, oom_cnt=0;
 
+	time_t rawtime;
+	struct tm * timeinfo;
+	char time_str[256];
+	#define GET_FORMATTED_TIME time(&rawtime); timeinfo = localtime(&rawtime); strftime(time_str, sizeof(time_str), "%B %e %H:%m:%S", timeinfo);
+
 	/* To be able to observe in real time what is happening when the
 	 * output is redirected we have to explicitely request line
 	 * buffering */
@@ -211,7 +217,8 @@ int main(int argc, char *argv[])
 
 		if(c % 10 == 0)
 		{
-			printf("avail: %5lu MiB\n", kb_avail/1024);
+			GET_FORMATTED_TIME
+			printf("%s avail: %5lu MiB\n", time_str, kb_avail/1024);
 			/*printf("kb_main_free: %lu kb_main_buffers: %lu kb_main_cached: %lu kb_main_shared: %lu\n",
 				kb_main_free, kb_main_buffers, kb_main_cached, kb_main_shared);
 			*/
@@ -221,8 +228,9 @@ int main(int argc, char *argv[])
 
 		if(kb_avail < kb_min)
 		{
-			fprintf(stderr, "Out of memory! avail: %lu MiB < min: %lu MiB\n",
-				kb_avail/1024, kb_min/1024);
+			GET_FORMATTED_TIME
+			fprintf(stderr, "%s Out of memory! avail: %lu MiB < min: %lu MiB\n",
+				time_str, kb_avail/1024, kb_min/1024);
 			handle_oom(procdir, 9);
 			oom_cnt++;
 		}
