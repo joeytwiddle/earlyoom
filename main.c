@@ -1,6 +1,12 @@
 /* If the available memory goes below this percentage, we start killing
  * processes. 10 is a good start. */
-#define MIN_AVAIL_PERCENT 15
+
+/* My machine with 2gig RAM and 2gig swap started grinding when swap fell below 300Mb.  (Memory would usually be close to 300Mb at this time, but sometimes a bit over. */
+//#define MIN_AVAIL_PERCENT 15
+/* But on my machine with 8gig RAM and 0gig swap, I think the threshold should be around 300 or 400Mb. */
+#define MIN_AVAIL_PERCENT 50
+/* Or perhaps we should just set a fixed amount, if it is generally true that Linux machines only get laggy when they have <300MB RAM (or <300MB of swap when swap is present. */
+/* Is memory more valuable than swap?  If I have 100 swap but 400 RAM then I might be ok, but if I have 100 RAM and 400 swap, then I'm in trouble!  Although in my experience, Linux will even them out fairly soon, so it seems reasonable to threshold the total free. */
 
 #include <stdio.h>
 #include <fcntl.h>
@@ -202,12 +208,13 @@ int main(int argc, char *argv[])
 
 	kb_avail = get_kb_avail();
 	kb_swap_avail = get_kb_swap_avail();
-	kb_min = kb_main_total/100*MIN_AVAIL_PERCENT;
+	kb_min = (kb_main_total + kb_swap_total)/100*MIN_AVAIL_PERCENT;
 
-	fprintf(stderr, "total: %5lu MiB\n", kb_main_total/1024);
-	fprintf(stderr, "min:   %5lu MiB\n", kb_min/1024);
-	fprintf(stderr, "avail: %5lu MiB\n", kb_avail/1024);
-	fprintf(stderr, "swap:  %5lu MiB\n", kb_swap_avail/1024);
+	fprintf(stderr, "mem total:  %5lu MiB\n", kb_main_total/1024);
+	fprintf(stderr, "mem avail:  %5lu MiB\n", kb_avail/1024);
+	fprintf(stderr, "swap total: %5lu MiB\n", kb_swap_total/1024);
+	fprintf(stderr, "swap avail: %5lu MiB\n", kb_swap_avail/1024);
+	fprintf(stderr, "threshold:  %5lu MiB\n", kb_min/1024);
 
 	/* Dry-run oom kill to make sure stack grows to maximum size before
 	 * calling mlockall()
@@ -238,17 +245,17 @@ int main(int argc, char *argv[])
 		c++;
 
 		//if(kb_avail < kb_min && kb_swap_avail < kb_min)
-		if(kb_avail + kb_swap_avail < 2 * kb_min)
+		if(kb_avail + kb_swap_avail < kb_min)
 		{
 			GET_FORMATTED_TIME
-			fprintf(stderr, "%s Out of memory! avail: %lu MiB + swap: %lu MiB < 2 x min: %lu MiB\n",
+			fprintf(stderr, "%s Out of memory! avail: %5lu MiB + swap: %5lu MiB < min: %5lu MiB\n",
 				time_str, kb_avail/1024, kb_swap_avail/1024, kb_min/1024);
 			handle_oom(procdir, 9);
 			oom_cnt++;
 			// On one occasion, kill_by_rss was called three times, on three different processes, when only the first really needed to be killed.
 			usleep(10*1000*1000); // 10 seconds
 		}
-		
+
 		usleep(100000); // 100ms
 	}
 	
