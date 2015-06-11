@@ -26,8 +26,10 @@ install-initscript:
 	cp earlyoom.initscript /etc/init.d/earlyoom
 	chmod a+x /etc/init.d/earlyoom
 	update-rc.d earlyoom start 18 2 3 4 5 . stop 20 0 1 6 .
+	/etc/init.d/earlyoom restart
 
 uninstall-initscript:
+	/etc/init.d/earlyoom stop
 	rm -f /usr/local/bin/earlyoom
 	rm -f /etc/init.d/earlyoom
 	update-rc.d earlyoom remove
