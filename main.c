@@ -4,7 +4,7 @@
 /* My machine with 2gig RAM and 2gig swap started grinding when swap fell below 300Mb.  (Memory would usually be close to 300Mb at this time, but sometimes a bit over. */
 //#define MIN_AVAIL_PERCENT 15
 /* But on my machine with 8gig RAM and 0gig swap, I think the threshold should be around 300 or 400Mb. */
-#define MIN_AVAIL_PERCENT 50
+#define MIN_AVAIL_PERCENT 5
 /* Or perhaps we should just set a fixed amount, if it is generally true that Linux machines only get laggy when they have <300MB RAM (or <300MB of swap when swap is present. */
 /* Is memory more valuable than swap?  If I have 100 swap but 400 RAM then I might be ok, but if I have 100 RAM and 400 swap, then I'm in trouble!  Although in my experience, Linux will even them out fairly soon, so it seems reasonable to threshold the total free. */
 
@@ -24,8 +24,17 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <time.h>
+#include <regex.h>
 
 #include "sysinfo.h"
+
+// The excluded regexp allows us to mark some processes as too precious to kill.
+// For example, closing the core process for Google Chrome is overkill when there are likely some tabs that can be killed first.  So we use the regexp to match just the browser process (no args = "$"), but not the tab processes (tend to have args "--type=renderer").
+// Perhaps "never kill" is not the best rule for this case.  We could instead divide the score of matching processes by 5, so they are less likely to be killed prematurely, but will ultimately be considered if needed.
+// Note that this is not a great solution: a malicious process could rename itself to evade consideration.  Ideas for alternative approaches would be welcomes!  (The kernel-space oom killer's exclusions requires PIDs be specified, which is powerful and accurate, but not very easy to use.)
+
+char *excluded_cmdlines_pattern = "\\<(init|sshd|chrome)$";
+regex_t excluded_cmdlines_regexp;
 
 /* "free -/+ buffers/cache"
  * Memory that is actually available to applications */
@@ -64,6 +73,32 @@ static int isnumeric(char* str)
 }
 
 #ifndef USE_KERNEL_OOM_KILLER
+long read_contents_of_file(char *filename, char *file_contents_buffer, long max_len)
+{
+	long input_file_size = 0;
+	FILE *input_file = fopen(filename, "rb");
+	char c;
+	while ( (c = fgetc(input_file)) != EOF )
+	{
+		file_contents_buffer[input_file_size] = c;
+		input_file_size++;
+		if (input_file_size == max_len) {
+			break;
+		}
+	}
+	fclose(input_file);
+	file_contents_buffer[input_file_size] = 0;
+	return input_file_size;
+}
+void convert_nulls_to_spaces(char *str, int len)
+{
+	int i;
+	for (i=0; i<len; i++) {
+		if (str[i] == 0) {
+			str[i] = 32;
+		}
+	}
+}
 /*
  * Find the process with the largest RSS and kill it.
  * See trigger_oom_killer() for the reason why this is done in userspace.
@@ -76,6 +111,9 @@ static void kill_by_rss(DIR *procdir, int sig)
 	int hog_pid=0;
 	unsigned long hog_rss=0;
 	char name[PATH_MAX];
+	#define CMDLINE_MAX 250
+	char cmdline[CMDLINE_MAX];
+	int len;
 
 	rewinddir(procdir);
 	while(1)
@@ -109,8 +147,18 @@ static void kill_by_rss(DIR *procdir, int sig)
 
 		if(VmRSS > hog_rss)
 		{
-			hog_pid=pid;
-			hog_rss=VmRSS;
+			// This process might be the new leader, if it is not excluded...
+			snprintf(buf, PATH_MAX, "%d/cmdline", pid);
+			len = read_contents_of_file(buf, cmdline, CMDLINE_MAX-1);
+			convert_nulls_to_spaces(cmdline, len);
+			if (regexec(&excluded_cmdlines_regexp, cmdline, (size_t)0, NULL, 0) != 0)
+			{
+				// This process is NOT excluded!
+				hog_pid=pid;
+				hog_rss=VmRSS;
+			//} else {
+				//fprintf(stderr, "Process is EXCLUDED!  %i %s\n", pid, cmdline);
+			}
 		}
 	}
 
@@ -120,11 +168,16 @@ static void kill_by_rss(DIR *procdir, int sig)
 		exit(9);
 	}
 
+	/*
 	name[0]=0;
 	snprintf(buf, PATH_MAX, "%d/stat", hog_pid);
 	FILE * stat = fopen(buf, "r");
 	fscanf(stat, "%d %s", &pid, name);
 	fclose(stat);
+	*/
+	snprintf(buf, PATH_MAX, "%d/cmdline", hog_pid);
+	len = read_contents_of_file(buf, name, PATH_MAX-1);
+	convert_nulls_to_spaces(name, len);
 
 	if(sig!=0)
 		fprintf(stderr, "Killing process %d %s\n", hog_pid, name);
@@ -133,6 +186,8 @@ static void kill_by_rss(DIR *procdir, int sig)
 	{
 		fprintf(stderr, "Warning: Could not kill process: %s\n", strerror(errno));
 	}
+
+	#undef CMDLINE_MAX
 }
 #else
 /*
@@ -185,6 +240,13 @@ int main(int argc, char *argv[])
 	struct tm * timeinfo;
 	char time_str[256];
 	#define GET_FORMATTED_TIME time(&rawtime); timeinfo = localtime(&rawtime); strftime(time_str, sizeof(time_str), "%B %e %H:%m:%S", timeinfo);
+
+	if (regcomp(&excluded_cmdlines_regexp, excluded_cmdlines_pattern, REG_EXTENDED|REG_NOSUB) != 0)
+	{
+		fprintf(stderr, "Could not compile regexp: %s\n", excluded_cmdlines_pattern);
+		exit(6);
+	}
+	// regfree(&excluded_cmdlines_regexp);
 
 	/* To be able to observe in real time what is happening when the
 	 * output is redirected we have to explicitely request line
