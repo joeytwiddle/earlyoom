@@ -31,9 +31,10 @@
 // The excluded regexp allows us to mark some processes as too precious to kill.
 // For example, closing the core process for Google Chrome is overkill when there are likely some tabs that can be killed first.  So we use the regexp to match just the browser process (no args = "$"), but not the tab processes (tend to have args "--type=renderer").
 // Perhaps "never kill" is not the best rule for this case.  We could instead divide the score of matching processes by 5, so they are less likely to be killed prematurely, but will ultimately be considered if needed.
+// We could opt for a different approach in this case.  We could increase the score of specific processes, e.g. "chrome --type=renderer" so that they will be more likely to be reclaimed.  Although the multiplier may need to be over 5 for a large chrome tab to beat the firefox process.  Perhaps firefox and chrome base processes could be given reduced score because we expect them to be large but they are important.  (OTOH, they tend to recover reasonably from being killed, perhaps better than other apps.)
 // Note that this is not a great solution: a malicious process could rename itself to evade consideration.  Ideas for alternative approaches would be welcomes!  (The kernel-space oom killer's exclusions requires PIDs be specified, which is powerful and accurate, but not very easy to use.)
 
-char *excluded_cmdlines_pattern = "\\<(init|sshd|chrome)$";
+char *excluded_cmdlines_pattern = "\\<(init .*|sshd .*|chrome|firefox .*)$";
 regex_t excluded_cmdlines_regexp;
 
 /* "free -/+ buffers/cache"
