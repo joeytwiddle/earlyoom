@@ -34,7 +34,8 @@
 // We could opt for a different approach in this case.  We could increase the score of specific processes, e.g. "chrome --type=renderer" so that they will be more likely to be reclaimed.  Although the multiplier may need to be over 5 for a large chrome tab to beat the firefox process.  Perhaps firefox and chrome base processes could be given reduced score because we expect them to be large but they are important.  (OTOH, they tend to recover reasonably from being killed, perhaps better than other apps.)
 // Note that this is not a great solution: a malicious process could rename itself to evade consideration.  Ideas for alternative approaches would be welcomes!  (The kernel-space oom killer's exclusions requires PIDs be specified, which is powerful and accurate, but not very easy to use.)
 
-char *excluded_cmdlines_pattern = "\\<(init .*|sshd .*|chrome|firefox .*)$";
+// I want to match all init, sshd and firefox processes, but ONLY the initial chrome process.  Chrome tab processes and extension processes will be treated normally.
+char *excluded_cmdlines_pattern = "\\<(init .*|sshd .*|firefox .*|chrome|chromium-browser)$";
 regex_t excluded_cmdlines_regexp;
 
 /* "free -/+ buffers/cache"
@@ -146,20 +147,24 @@ static void kill_by_rss(DIR *procdir, int sig)
 		}
 		fclose(statm);
 
+		// We don't need to check this, but it is a good optimization, reducing the number of files that will be read.
 		if(VmRSS > hog_rss)
 		{
-			// This process might be the new leader, if it is not excluded...
+			// If the process is marked as excluded, then reduce its score.
 			snprintf(buf, PATH_MAX, "%d/cmdline", pid);
 			len = read_contents_of_file(buf, cmdline, CMDLINE_MAX-1);
 			convert_nulls_to_spaces(cmdline, len);
-			if (regexec(&excluded_cmdlines_regexp, cmdline, (size_t)0, NULL, 0) != 0)
+			if (regexec(&excluded_cmdlines_regexp, cmdline, (size_t)0, NULL, 0) == 0)
 			{
-				// This process is NOT excluded!
-				hog_pid=pid;
-				hog_rss=VmRSS;
-			//} else {
 				//fprintf(stderr, "Process is EXCLUDED!  %i %s\n", pid, cmdline);
+				VmRSS /= 32;
 			}
+		}
+
+		if(VmRSS > hog_rss)
+		{
+			hog_pid=pid;
+			hog_rss=VmRSS;
 		}
 	}
 
