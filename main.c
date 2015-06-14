@@ -35,7 +35,7 @@
 // Note that this is not a great solution: a malicious process could rename itself to evade consideration.  Ideas for alternative approaches would be welcomes!  (The kernel-space oom killer's exclusions requires PIDs be specified, which is powerful and accurate, but not very easy to use.)
 
 // I want to match all init, sshd and firefox processes, but ONLY the initial chrome process.  Chrome tab processes and extension processes will be treated normally.
-char *excluded_cmdlines_pattern = "\\<(init .*|sshd .*|firefox .*|chrome|chromium-browser)$";
+char *excluded_cmdlines_pattern = "\\<(((init|X|sshd|firefox)( .*|$))|chrome|chromium-browser)$";
 regex_t excluded_cmdlines_regexp;
 
 /* "free -/+ buffers/cache"
