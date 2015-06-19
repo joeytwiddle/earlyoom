@@ -316,12 +316,28 @@ int main(int argc, char *argv[])
 		if(kb_avail + kb_swap_avail < kb_min)
 		{
 			GET_FORMATTED_TIME
-			fprintf(stderr, "%s Out of memory! avail: %5lu MiB + swap: %5lu MiB < min: %5lu MiB\n",
+			fprintf(stderr, "%s Out of memory!     avail: %5lu MiB + swap: %5lu MiB < min: %5lu MiB\n",
 				time_str, kb_avail/1024, kb_swap_avail/1024, kb_min/1024);
+
 			handle_oom(procdir, 9);
 			oom_cnt++;
+
+			// Let's check if it worked immediately
+			kb_avail = get_kb_avail();
+			kb_swap_avail = get_kb_swap_avail();
+			GET_FORMATTED_TIME
+			fprintf(stderr, "%s Memory after kill: avail: %5lu MiB + swap: %5lu MiB\n",
+				time_str, kb_avail/1024, kb_swap_avail/1024, kb_min/1024);
+
 			// On one occasion, kill_by_rss was called three times, on three different processes, when only the first really needed to be killed.
 			usleep(10*1000*1000); // 10 seconds
+
+			// Let's check if waiting makes a difference.
+			kb_avail = get_kb_avail();
+			kb_swap_avail = get_kb_swap_avail();
+			GET_FORMATTED_TIME
+			fprintf(stderr, "%s Memory after wait: avail: %5lu MiB + swap: %5lu MiB\n",
+				time_str, kb_avail/1024, kb_swap_avail/1024, kb_min/1024);
 		}
 
 		usleep(100000); // 100ms
