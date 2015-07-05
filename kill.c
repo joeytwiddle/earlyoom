@@ -69,6 +69,34 @@ static struct procinfo get_process_stats(int pid)
 	return p;
 }
 
+long read_contents_of_file(char *filename, char *file_contents_buffer, long max_len)
+{
+	long input_file_size = 0;
+	FILE *input_file = fopen(filename, "rb");
+	char c;
+	while ( (c = fgetc(input_file)) != EOF )
+	{
+		file_contents_buffer[input_file_size] = c;
+		input_file_size++;
+		if (input_file_size == max_len) {
+			break;
+		}
+	}
+	fclose(input_file);
+	file_contents_buffer[input_file_size] = 0;
+	return input_file_size;
+}
+
+void convert_nulls_to_spaces(char *str, int len)
+{
+	int i;
+	for (i=0; i<len; i++) {
+		if (str[i] == 0) {
+			str[i] = 32;
+		}
+	}
+}
+
 /*
  * Find the process with the largest oom_score and kill it.
  * See trigger_kernel_oom() for the reason why this is done in userspace.
@@ -83,6 +111,9 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 	char name[PATH_MAX];
 	struct procinfo p;
 	int badness;
+	#define CMDLINE_MAX 250
+	char cmdline[CMDLINE_MAX];
+	int len;
 
 	rewinddir(procdir);
 	while(1)
@@ -109,6 +140,20 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 		if(enable_debug)
 			printf("pid %5d: badness %3d\n", pid, badness);
 
+		// We don't need to check this, but it is a good optimization, reducing the number of files that will be read.
+		if(badness > victim_points)
+		{
+			// If the process is marked as excluded, then reduce its score.
+			snprintf(buf, PATH_MAX, "%d/cmdline", pid);
+			len = read_contents_of_file(buf, cmdline, CMDLINE_MAX-1);
+			convert_nulls_to_spaces(cmdline, len);
+			if (regexec(&excluded_cmdlines_regexp, cmdline, (size_t)0, NULL, 0) == 0)
+			{
+				//fprintf(stderr, "Process is EXCLUDED!  %i %s\n", pid, cmdline);
+				badness /= 32;
+			}
+		}
+
 		if(badness > victim_points)
 		{
 			victim_pid = pid;
@@ -124,11 +169,19 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 		exit(9);
 	}
 
-	name[0]=0;
-	snprintf(buf, sizeof(buf), "%d/stat", victim_pid);
-	FILE * stat = fopen(buf, "r");
-	fscanf(stat, "%*d %s", name);
-	fclose(stat);
+	if (!enable_debug)
+	{
+		name[0]=0;
+		snprintf(buf, sizeof(buf), "%d/stat", victim_pid);
+		FILE * stat = fopen(buf, "r");
+		fscanf(stat, "%*d %s", name);
+		fclose(stat);
+	} else {
+		// In debug mode, instead of the process name, we display the whole cmdline (i.e. the name and the arguments passed).
+		snprintf(buf, PATH_MAX, "%d/cmdline", victim_pid);
+		len = read_contents_of_file(buf, name, PATH_MAX-1);
+		convert_nulls_to_spaces(name, len);
+	}
 
 	if(sig != 0)
 		fprintf(stderr, "Killing process %d %s\n", victim_pid, name);
@@ -150,7 +203,7 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
  *    See https://code.google.com/p/chromium/issues/detail?id=333617 for more info
  * 3) It is broken in 4.0.5 - see
  *    https://github.com/rfjakob/earlyoom/commit/f7e2cedce8e9605c688d0c6d7dc26b7e81817f02
- * Because of these issues, kill_by_rss() is used instead by default.
+ * Because of these issues, userspace_kill() is used instead by default.
  */
 void trigger_kernel_oom(int sig)
 {

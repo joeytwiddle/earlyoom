@@ -8,9 +8,24 @@
 #include <dirent.h>
 #include <stdlib.h>
 #include <sys/mman.h>
+#include <time.h>
+#include <regex.h>
+
+//#include "sysinfo.h"
 
 #include "meminfo.h"
 #include "kill.h"
+
+// The excluded regexp allows us to mark some processes as too precious to kill.
+// For example, closing the core google-chrome process will close all the tabs, when there are likely just a few tabs that can be killed to relclaim a lot of memory.  So we use the regexp to match just the browser process (no args = "$"), but not the tab processes (tend to have args "--type=renderer").
+// DONE: Perhaps "never kill" is not the best rule for this case.  We could instead divide the score of matching processes by 32, so they are less likely to be killed prematurely, but will ultimately be considered if needed.
+// CONSIDER: We could opt for a different approach in this case.  We could increase the score of specific processes, e.g. "chrome --type=renderer" so that they will be more likely to be reclaimed.  Although the multiplier may need to be over 5 for a large chrome tab to beat the firefox process.  Perhaps firefox and chrome base processes could be given reduced score because we expect them to be large but they are important.  (OTOH, they tend to recover reasonably from being killed, perhaps better than other apps.)
+// NOTE: solutions based on process name will never be ideal: a malicious process could rename itself to evade consideration.  Ideas for alternative approaches would be welcomed!  (The kernel-space oom killer's exclusions requires PIDs be specified, which is powerful and accurate, but not very easy to use.)
+// TODO: Slightly reduce score for recent processes.  (Is this stored somewhere in /proc/<pid>/...?)  Because I found recently that earlyoom killed the google-chrome tabset that I was working on, when it probably would have been better to close some older tabsets.
+
+// I want to match all init, sshd and firefox processes, but ONLY the initial chrome process.  Chrome tab processes and extension processes will be treated normally.
+char *excluded_cmdlines_pattern = "(^|/)(((init|X|sshd|firefox)( .*|$))|chrome|chromium-browser)$";
+regex_t excluded_cmdlines_regexp;
 
 int enable_debug = 0;
 
@@ -23,6 +38,18 @@ int main(int argc, char *argv[])
 	int mem_min_percent = 10, swap_min_percent = 10;
 	long mem_min, swap_min; /* Same thing in kiB */
 	int ignore_oom_score_adj = 0;
+
+	time_t rawtime;
+	struct tm * timeinfo;
+	char time_str[256];
+	#define GET_FORMATTED_TIME time(&rawtime); timeinfo = localtime(&rawtime); strftime(time_str, sizeof(time_str), "%B %e %H:%m:%S", timeinfo);
+
+	if (regcomp(&excluded_cmdlines_regexp, excluded_cmdlines_pattern, REG_EXTENDED|REG_NOSUB) != 0)
+	{
+		fprintf(stderr, "Could not compile regexp: %s\n", excluded_cmdlines_pattern);
+		exit(6);
+	}
+	// regfree(&excluded_cmdlines_regexp);
 
 	/* request line buffering for stdout - otherwise the output
 	 * may lag behind stderr */
@@ -75,8 +102,8 @@ int main(int argc, char *argv[])
 			case 'h':
 				fprintf(stderr,
 					"Usage: earlyoom [-m PERCENT] [-s PERCENT] [-k|-i] [-h]\n"
-					"-m ... set available memory minimum to PERCENT of total (default 10 %)\n"
-					"-s ... set free swap minimum to PERCENT of total (default 10 %)\n"
+					"-m ... set available memory minimum to PERCENT of total (default 10 %%)\n"
+					"-s ... set free swap minimum to PERCENT of total (default 10 %%)\n"
 					"-k ... use kernel oom killer instead of own user-space implementation\n"
 					"-i ... user-space oom killer should ignore positive oom_score_adj\n"
 					"-d ... enable debugging messages\n"
@@ -119,20 +146,43 @@ int main(int argc, char *argv[])
 
 		if(c % 10 == 0)
 		{
-			printf("mem avail: %5lu MiB, swap free: %5lu MiB\n",
-				m.MemAvailable / 1024, m.SwapFree / 1024);
+			GET_FORMATTED_TIME
+			printf("%s mem avail: %5lu MiB, swap free: %5lu MiB\n",
+				time_str, m.MemAvailable / 1024, m.SwapFree / 1024);
 			c=0;
 		}
 		c++;
 
 		if(m.MemAvailable <= mem_min && m.SwapFree <= swap_min)
 		{
-			fprintf(stderr, "Out of memory! avail: %lu MiB < min: %lu MiB\n",
-				m.MemAvailable / 1024, mem_min / 1024);
+			GET_FORMATTED_TIME
+			fprintf(stderr, "%s Out of memory!     avail: %lu MiB < min: %lu MiB\n",
+				time_str, m.MemAvailable / 1024, mem_min / 1024);
 			handle_oom(procdir, 9, kernel_oom_killer, ignore_oom_score_adj);
 			oom_cnt++;
+
+			// Let's check if it worked immediately
+			if (enable_debug)
+			{
+				m = parse_meminfo();
+				GET_FORMATTED_TIME
+				fprintf(stderr, "%s Memory after kill: avail: %5lu MiB + swap: %5lu MiB\n",
+					time_str, m.MemAvailable / 1024, m.SwapFree / 1024, mem_min / 1024);
+			}
+
+			// On one occasion, kill_by_rss was called three times, on three different processes, when only the first really needed to be killed.
+			usleep(10*1000*1000); // 10 seconds
+
+			// Let's check if waiting makes a difference.
+			if (enable_debug)
+			{
+				m = parse_meminfo();
+				GET_FORMATTED_TIME
+				fprintf(stderr, "%s Memory after wait: avail: %5lu MiB + swap: %5lu MiB\n",
+					time_str, m.MemAvailable / 1024, m.SwapFree / 1024, mem_min / 1024);
+			}
 		}
-		
+
 		usleep(100000); // 100ms
 	}
 	
