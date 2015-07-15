@@ -83,6 +83,13 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 	char name[PATH_MAX];
 	struct procinfo p;
 	int badness;
+	float uptime;
+	float proc_start_time;
+
+	// TODO: Probably more efficient to get uptime from sysinfo().  http://stackoverflow.com/questions/1540627/what-api-do-i-call-to-get-the-system-uptime#1544090
+	FILE * proc_uptime_file = fopen("/proc/uptime", "r");
+	fscanf(proc_uptime_file, "%f", &uptime);
+	fclose(proc_uptime_file);
 
 	rewinddir(procdir);
 	while(1)
@@ -105,6 +112,30 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 		badness = p.oom_score;
 		if(ignore_oom_score_adj && p.oom_score_adj > 0)
 			badness -= p.oom_score_adj;
+
+		if(badness > victim_points)
+		{
+			snprintf(buf, sizeof(buf), "%d/stat", pid);
+			FILE * stat = fopen(buf, "r");
+			fscanf(stat, "%*d %s %*s %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %f", name, &proc_start_time);
+			fclose(stat);
+			proc_start_time /= 100.0;
+
+			float time_running = uptime - proc_start_time;
+			if(time_running < 60 * 60 * 2)
+			{
+				if(enable_debug)
+					fprintf(stderr, "[%d] Uptime=%0.3f start_time=%0.3f time_running=%0.3f badness=%d\n", pid, uptime, proc_start_time, time_running, badness);
+				float thru = time_running / (float)(60 * 60 * 2);
+				// Curved (exponential?)
+				//float modifier = 300.0 / (1.0 + 299.0 * thru);
+				// Linear
+				float modifier = 300.0 - 299.0 * thru;
+				badness = badness - modifier;
+				if(enable_debug)
+					fprintf(stderr, "[%d] %s Reduced badness by %0.1f to %d because time running = %0.1f minutes.\n", pid, name, modifier, badness, time_running/60.0);
+			}
+		}
 
 		if(enable_debug)
 			printf("pid %5d: badness %3d\n", pid, badness);
@@ -131,7 +162,7 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 	fclose(stat);
 
 	if(sig != 0)
-		fprintf(stderr, "Killing process %d %s\n", victim_pid, name);
+		fprintf(stderr, "Killing process %d %s with badness %d\n", victim_pid, name, victim_points);
 
 	if(kill(victim_pid, sig) != 0)
 		perror("Could not kill process");
