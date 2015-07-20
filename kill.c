@@ -158,11 +158,14 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 	name[0]=0;
 	snprintf(buf, sizeof(buf), "%d/stat", victim_pid);
 	FILE * stat = fopen(buf, "r");
-	fscanf(stat, "%*d %s", name);
+	//fscanf(stat, "%*d %s", name);
+	fscanf(stat, "%*d %s %*s %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %f", name, &proc_start_time);
+	proc_start_time /= 100.0;
+	float time_running = uptime - proc_start_time;
 	fclose(stat);
 
 	if(sig != 0)
-		fprintf(stderr, "Killing process %d %s with badness %d\n", victim_pid, name, victim_points);
+		fprintf(stderr, "Killing process %d %s with badness %d time_running=%0.1fm\n", victim_pid, name, victim_points, time_running/60.0);
 
 	if(kill(victim_pid, sig) != 0)
 		perror("Could not kill process");
