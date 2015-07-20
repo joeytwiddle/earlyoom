@@ -122,11 +122,11 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 			proc_start_time /= 100.0;
 
 			float time_running = uptime - proc_start_time;
-			if(time_running < 60 * 60 * 2)
+			if(time_running < 60 * 60 * 24)
 			{
 				if(enable_debug)
 					fprintf(stderr, "[%d] Uptime=%0.3f start_time=%0.3f time_running=%0.3f badness=%d\n", pid, uptime, proc_start_time, time_running, badness);
-				float thru = time_running / (float)(60 * 60 * 2);
+				float thru = time_running / (float)(60 * 60 * 24);
 				// Curved (exponential?)
 				//float modifier = 300.0 / (1.0 + 299.0 * thru);
 				// Linear
