@@ -8,6 +8,7 @@
 #include <signal.h>
 #include <ctype.h>
 #include <limits.h>                     // for PATH_MAX
+#include <unistd.h>                     // for _SC_CLK_TCK
 
 #include "kill.h"
 
@@ -119,7 +120,7 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 			FILE * stat = fopen(buf, "r");
 			fscanf(stat, "%*d %s %*s %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %f", name, &proc_start_time);
 			fclose(stat);
-			proc_start_time /= 100.0;
+			proc_start_time /= (float)sysconf(_SC_CLK_TCK);
 
 			float time_running = uptime - proc_start_time;
 			if(time_running < 60 * 60 * 24)
