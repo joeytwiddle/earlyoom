@@ -84,12 +84,12 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 	char name[PATH_MAX];
 	struct procinfo p;
 	int badness;
-	float uptime;
-	float proc_start_time;
+	long long unsigned int uptime;
+	long long unsigned int proc_start_time;
 
 	// TODO: Probably more efficient to get uptime from sysinfo().  http://stackoverflow.com/questions/1540627/what-api-do-i-call-to-get-the-system-uptime#1544090
 	FILE * proc_uptime_file = fopen("/proc/uptime", "r");
-	fscanf(proc_uptime_file, "%f", &uptime);
+	fscanf(proc_uptime_file, "%llu", &uptime);
 	fclose(proc_uptime_file);
 
 	rewinddir(procdir);
@@ -118,15 +118,15 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 		{
 			snprintf(buf, sizeof(buf), "%d/stat", pid);
 			FILE * stat = fopen(buf, "r");
-			fscanf(stat, "%*d %s %*s %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %f", name, &proc_start_time);
+			fscanf(stat, "%*d %s %*s %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %llu", name, &proc_start_time);
 			fclose(stat);
-			proc_start_time /= (float)sysconf(_SC_CLK_TCK);
+			proc_start_time /= sysconf(_SC_CLK_TCK);
 
-			float time_running = uptime - proc_start_time;
+			long long unsigned int time_running = uptime - proc_start_time;
 			if(time_running < 60 * 60 * 24)
 			{
 				if(enable_debug)
-					fprintf(stderr, "[%d] Uptime=%0.3f start_time=%0.3f time_running=%0.3f badness=%d\n", pid, uptime, proc_start_time, time_running, badness);
+					fprintf(stderr, "[%d] Uptime=%llu start_time=%llu time_running=%llu badness=%d\n", pid, uptime, proc_start_time, time_running, badness);
 				float thru = time_running / (float)(60 * 60 * 24);
 				// Curved (exponential?)
 				//float modifier = 300.0 / (1.0 + 299.0 * thru);
@@ -134,7 +134,7 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 				float modifier = 300.0 - 299.0 * thru;
 				badness = badness - modifier;
 				if(enable_debug)
-					fprintf(stderr, "[%d] %s Reduced badness by %0.1f to %d because time running = %0.1f minutes.\n", pid, name, modifier, badness, time_running/60.0);
+					fprintf(stderr, "[%d] %s Reduced badness by %0.1f to %d because time running = %0.1f minutes.\n", pid, name, modifier, badness, (float)time_running/60.0);
 			}
 		}
 
@@ -160,9 +160,9 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 	snprintf(buf, sizeof(buf), "%d/stat", victim_pid);
 	FILE * stat = fopen(buf, "r");
 	//fscanf(stat, "%*d %s", name);
-	fscanf(stat, "%*d %s %*s %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %f", name, &proc_start_time);
-	proc_start_time /= 100.0;
-	float time_running = uptime - proc_start_time;
+	fscanf(stat, "%*d %s %*s %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %llu", name, &proc_start_time);
+	proc_start_time /= sysconf(_SC_CLK_TCK);
+	long long unsigned int time_running = uptime - proc_start_time;
 	fclose(stat);
 
 	if(sig != 0)
