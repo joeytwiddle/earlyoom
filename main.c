@@ -8,11 +8,23 @@
 #include <dirent.h>
 #include <stdlib.h>
 #include <sys/mman.h>
+#include <regex.h>
 
 #include "meminfo.h"
 #include "kill.h"
 
 int enable_debug = 0;
+
+// Any process whose cmdline matches this regexp will be LESS likely to be killed.
+char *excluded_cmdlines_pattern = "(^|/)(((init|X|sshd|firefox)( .*|$))|chrome|chromium-browser)$";
+// (I want to match all init, sshd and firefox processes, but only the INITIAL chrome process.  Chrome tab processes and extension processes will not be protected.)
+
+// Any process whose cmdline matches this regexp will be MORE likely to be killed.
+char *preferred_cmdlines_pattern = "(^|/)(chrome|chromium-browser).*--type=renderer";
+// (I want to kill Chrome tabs more often than Chrome extensions.)
+
+regex_t excluded_cmdlines_regexp;
+regex_t preferred_cmdlines_regexp;
 
 int main(int argc, char *argv[])
 {
@@ -23,6 +35,18 @@ int main(int argc, char *argv[])
 	int mem_min_percent = 10, swap_min_percent = 10;
 	long mem_min, swap_min; /* Same thing in kiB */
 	int ignore_oom_score_adj = 0;
+
+	if (regcomp(&excluded_cmdlines_regexp, excluded_cmdlines_pattern, REG_EXTENDED|REG_NOSUB) != 0)
+	{
+		fprintf(stderr, "Could not compile regexp: %s\n", excluded_cmdlines_pattern);
+		exit(6);
+	}
+
+	if (regcomp(&preferred_cmdlines_regexp, preferred_cmdlines_pattern, REG_EXTENDED|REG_NOSUB) != 0)
+	{
+		fprintf(stderr, "Could not compile regexp: %s\n", excluded_cmdlines_pattern);
+		exit(6);
+	}
 
 	/* request line buffering for stdout - otherwise the output
 	 * may lag behind stderr */

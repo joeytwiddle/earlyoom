@@ -9,10 +9,13 @@
 #include <ctype.h>
 #include <limits.h>                     // for PATH_MAX
 #include <unistd.h>                     // for _SC_CLK_TCK
+#include <regex.h>
 
 #include "kill.h"
 
 extern int enable_debug;
+extern regex_t excluded_cmdlines_regexp;
+extern regex_t preferred_cmdlines_regexp;
 
 struct procinfo {
 	int oom_score;
@@ -154,33 +157,59 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 		if(ignore_oom_score_adj && p.oom_score_adj > 0)
 			badness -= p.oom_score_adj;
 
-		if(badness > victim_points || enable_debug)
+		float thru = 0;
+		//if(badness > victim_points || enable_debug)
+		// The above heuristic does not apply now we might increase the badness (preferred_cmdlines_regexp)
+		if (1)
 		{
-			snprintf(buf, PATH_MAX, "%d/cmdline", pid);
-			int len = read_contents_of_file(buf, cmdline, CMDLINE_MAX-1);
-			convert_nulls_to_spaces(cmdline, len);
-			if (len > 30) {
-				cmdline[30] = '\0';
-			}
+			int time_modifier = 0;
 			snprintf(buf, sizeof(buf), "%d/stat", pid);
 			FILE * stat = fopen(buf, "r");
 			long int priority;
 			fscanf(stat, "%*d %s %*s %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %ld %*d %*d %*d %llu", name, &priority, &proc_start_time);
 			fclose(stat);
 			proc_start_time /= sysconf(_SC_CLK_TCK);
-
 			long long unsigned int time_running = uptime - proc_start_time;
 			if(time_running < 60 * 60 * 8)
 			{
-				float thru = time_running / (float)(60 * 60 * 8);
+				thru = time_running / (float)(60 * 60 * 8);
 				// Curved (exponential?)
-				int modifier = 300.0 / (1.0 + 299 * thru);
+				//time_modifier = 300.0 / (1.0 + 299 * thru);
 				// Linear
-				//int modifier = 300 - 299 * thru;
-				if(enable_debug)
-					fprintf(stderr, "[%d] time_running: %llum (%0.2f) priority: %ld badness: %d - %d = %d\n cmdline=\"%s\"", pid, time_running/60, thru, priority, badness, modifier, badness - modifier, cmdline);
-				badness = badness - modifier;
+				time_modifier = 300 - 299 * thru;
 			}
+
+			int cmdline_modifier = 0;
+			snprintf(buf, PATH_MAX, "%d/cmdline", pid);
+			int len = read_contents_of_file(buf, cmdline, CMDLINE_MAX-1);
+			convert_nulls_to_spaces(cmdline, len);
+
+			if (regexec(&excluded_cmdlines_regexp, cmdline, (size_t)0, NULL, 0) == 0)
+			{
+				//fprintf(stderr, "Process %i is EXCLUDED!\n", pid, name);
+				cmdline_modifier -= 400;
+			}
+			if (regexec(&preferred_cmdlines_regexp, cmdline, (size_t)0, NULL, 0) == 0)
+			{
+				//fprintf(stderr, "Process %i is PREFERRED!\n", pid, name);
+				cmdline_modifier += 300;
+			}
+
+			// Now the we have checked the cmdline, we make it more appropriate for logging.
+			if (len > 40)
+			{
+				cmdline[40] = '\0';
+			}
+			// Many processes have an empty cmdline.  So we will display the process name instead.  (Which is usually surrounded by parenthesese.)
+			if (strlen(cmdline) == 0)
+			{
+				strcpy(cmdline, name);
+			}
+
+			int modifier = -time_modifier + cmdline_modifier;
+			if(enable_debug && modifier != 0 || sig == 0)
+				fprintf(stderr, "[%d] time_running: %llum (%0.2f) priority: %ld badness: %d - %d + %d = %d cmdline=\"%s\"\n", pid, time_running/60, thru, priority, badness, time_modifier, cmdline_modifier, badness + modifier, cmdline);
+			badness = badness + modifier;
 		}
 
 		if(enable_debug)
