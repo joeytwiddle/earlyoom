@@ -40,6 +40,34 @@ static int isnumeric(char* str)
 	}
 }
 
+long read_contents_of_file(char *filename, char *file_contents_buffer, long max_len)
+{
+	long input_file_size = 0;
+	FILE *input_file = fopen(filename, "rb");
+	char c;
+	while ( (c = fgetc(input_file)) != EOF )
+	{
+		file_contents_buffer[input_file_size] = c;
+		input_file_size++;
+		if (input_file_size == max_len) {
+			break;
+		}
+	}
+	fclose(input_file);
+	file_contents_buffer[input_file_size] = 0;
+	return input_file_size;
+}
+
+void convert_nulls_to_spaces(char *str, int len)
+{
+	int i;
+	for (i=0; i<len; i++) {
+		if (str[i] == 0) {
+			str[i] = 32;
+		}
+	}
+}
+
 /* Read /proc/pid/{oom_score, oom_score_adj, statm}
  * Caller must ensure that we are already in the /proc/ directory
  */
@@ -70,6 +98,16 @@ static struct procinfo get_process_stats(int pid)
 	return p;
 }
 
+/* More things we could read:
+ *
+ * /proc/[pid]/fd will link to each file the process has open.  Checking which of these files was recently written or accessed, might help us decide which processes are active and which are idle.
+ *
+ * We could look at /proc/[pid]/fdinfo to check the open status in 'flags' and even monitor the position in the file ('pos') for changes.
+ *
+ *
+ *
+ */
+
 /*
  * Find the process with the largest oom_score and kill it.
  * See trigger_kernel_oom() for the reason why this is done in userspace.
@@ -82,6 +120,8 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 	int victim_pid = 0;
 	int victim_points = 0;
 	char name[PATH_MAX];
+	#define CMDLINE_MAX 250
+	char cmdline[CMDLINE_MAX];
 	struct procinfo p;
 	int badness;
 	long long unsigned int uptime;
@@ -114,27 +154,32 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 		if(ignore_oom_score_adj && p.oom_score_adj > 0)
 			badness -= p.oom_score_adj;
 
-		if(badness > victim_points)
+		if(badness > victim_points || enable_debug)
 		{
+			snprintf(buf, PATH_MAX, "%d/cmdline", pid);
+			int len = read_contents_of_file(buf, cmdline, CMDLINE_MAX-1);
+			convert_nulls_to_spaces(cmdline, len);
+			if (len > 30) {
+				cmdline[30] = '\0';
+			}
 			snprintf(buf, sizeof(buf), "%d/stat", pid);
 			FILE * stat = fopen(buf, "r");
-			fscanf(stat, "%*d %s %*s %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %llu", name, &proc_start_time);
+			long int priority;
+			fscanf(stat, "%*d %s %*s %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %ld %*d %*d %*d %llu", name, &priority, &proc_start_time);
 			fclose(stat);
 			proc_start_time /= sysconf(_SC_CLK_TCK);
 
 			long long unsigned int time_running = uptime - proc_start_time;
-			if(time_running < 60 * 60 * 24)
+			if(time_running < 60 * 60 * 8)
 			{
-				if(enable_debug)
-					fprintf(stderr, "[%d] Uptime=%llu start_time=%llu time_running=%llu badness=%d\n", pid, uptime, proc_start_time, time_running, badness);
-				float thru = time_running / (float)(60 * 60 * 24);
+				float thru = time_running / (float)(60 * 60 * 8);
 				// Curved (exponential?)
-				//float modifier = 300.0 / (1.0 + 299.0 * thru);
+				int modifier = 300.0 / (1.0 + 299 * thru);
 				// Linear
-				float modifier = 300.0 - 299.0 * thru;
-				badness = badness - modifier;
+				//int modifier = 300 - 299 * thru;
 				if(enable_debug)
-					fprintf(stderr, "[%d] %s Reduced badness by %0.1f to %d because time running = %0.1f minutes.\n", pid, name, modifier, badness, (float)time_running/60.0);
+					fprintf(stderr, "[%d] time_running: %llum (%0.2f) priority: %ld badness: %d - %d = %d\n cmdline=\"%s\"", pid, time_running/60, thru, priority, badness, modifier, badness - modifier, cmdline);
+				badness = badness - modifier;
 			}
 		}
 
