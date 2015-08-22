@@ -101,6 +101,29 @@ static struct procinfo get_process_stats(int pid)
 	return p;
 }
 
+static int get_process_mem_stats(int pid, long *VmSize, long *VmRSS)
+{
+	char buf[PATH_MAX];
+
+	snprintf(buf, sizeof(buf), "%d/statm", pid);
+
+	FILE * statm = fopen(buf, "r");
+	if(statm == 0)
+	{
+		// Process may have died in the meantime
+		return 0;
+	}
+
+	if(fscanf(statm, "%lu %lu", VmSize, VmRSS) < 2)
+	{
+		fprintf(stderr, "Error: Could not parse %s\n", buf);
+		return 0;
+	}
+	fclose(statm);
+
+	return 1;
+}
+
 /* More things we could read:
  *
  * /proc/[pid]/fd will link to each file the process has open.  Checking which of these files was recently written or accessed, might help us decide which processes are active and which are idle.
@@ -129,6 +152,7 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 	int badness;
 	long long unsigned int uptime;
 	long long unsigned int proc_start_time;
+	long VmSize, VmRSS;
 
 	// TODO: Probably more efficient to get uptime from sysinfo().  http://stackoverflow.com/questions/1540627/what-api-do-i-call-to-get-the-system-uptime#1544090
 	FILE * proc_uptime_file = fopen("/proc/uptime", "r");
@@ -159,7 +183,7 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 
 		float thru = 0;
 		//if(badness > victim_points || enable_debug)
-		// The above heuristic does not apply now we might increase the badness (preferred_cmdlines_regexp)
+		// The above heuristic does not apply now we might increase the badness (preferred_cmdlines_regexp and mem_modifier)
 		if (1)
 		{
 			int time_modifier = 0;
@@ -178,11 +202,26 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 				// Linear
 				time_modifier = 300 - 299 * thru;
 			}
+			// TODO: Instead of the above, I am tempted to multiply (positive) cmdline_modifier and mem_modifier by thru.  Maybe original (positive) badness too?  In that case, just multiply the final result, if it is positive.
+
+			if (!get_process_mem_stats(pid, &VmSize, &VmRSS))
+			{
+				continue;
+			}
+			// VmRSS: RAM currently consumed by process
+			//int mem_modifier = VmRSS / 1024;
+			// VmSize: Total memory consumed by process, including RAM, swapped memory, and shared memory (e.g. executable instructions cached on FS, or shared with other processes)
+			int mem_modifier = VmSize / 1024 / 4;
 
 			int cmdline_modifier = 0;
 			snprintf(buf, PATH_MAX, "%d/cmdline", pid);
 			int len = read_contents_of_file(buf, cmdline, CMDLINE_MAX-1);
 			convert_nulls_to_spaces(cmdline, len);
+			// Remove the usual trailing space
+			if (cmdline[len-1] == ' ')
+			{
+				cmdline[len-1] = 0;
+			}
 
 			if (regexec(&excluded_cmdlines_regexp, cmdline, (size_t)0, NULL, 0) == 0)
 			{
@@ -196,9 +235,9 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 			}
 
 			// Now the we have checked the cmdline, we make it more appropriate for logging.
-			if (len > 40)
+			if (len > 60)
 			{
-				cmdline[40] = '\0';
+				cmdline[60] = '\0';
 			}
 			// Many processes have an empty cmdline.  So we will display the process name instead.  (Which is usually surrounded by parenthesese.)
 			if (strlen(cmdline) == 0)
@@ -206,9 +245,9 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 				strcpy(cmdline, name);
 			}
 
-			int modifier = -time_modifier + cmdline_modifier;
+			int modifier = -time_modifier + mem_modifier + cmdline_modifier;
 			if(enable_debug && modifier != 0 || sig == 0)
-				fprintf(stderr, "[%d] time_running: %llum (%0.2f) priority: %ld badness: %d - %d + %d = %d cmdline=\"%s\"\n", pid, time_running/60, thru, priority, badness, time_modifier, cmdline_modifier, badness + modifier, cmdline);
+				fprintf(stderr, "[%5u] time_running: %4llum (%0.2f) priority: %3ld badness: %3d - %3d + %3d + %3d = %3d cmdline=\"%s\"\n", pid, time_running/60, thru, priority, badness, time_modifier, mem_modifier, cmdline_modifier, badness + modifier, cmdline);
 			badness = badness + modifier;
 		}
 
@@ -227,7 +266,8 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 	if(victim_pid == 0)
 	{
 		fprintf(stderr, "Error: Could not find a process to kill\n");
-		exit(9);
+		//exit(9);
+		return;
 	}
 
 	name[0]=0;
