@@ -194,15 +194,21 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 			fclose(stat);
 			proc_start_time /= sysconf(_SC_CLK_TCK);
 			long long unsigned int time_running = uptime - proc_start_time;
-			if(time_running < 60 * 60 * 8)
-			{
-				thru = time_running / (float)(60 * 60 * 8);
-				// Curved (exponential?)
-				//time_modifier = 300.0 / (1.0 + 299 * thru);
-				// Linear
-				time_modifier = 300 - 299 * thru;
+			thru = time_running / (float)(60 * 60 * 1);
+			if (thru > 1) {
+				thru = 1;
 			}
+			if (thru < 0) {
+				thru = 0;
+			}
+			// No longer used:
+			// Curved (exponential?)
+			//time_modifier = 300 - 300.0 / (1.0 + 299 * thru);
+			// Linear
+			time_modifier = 500 * thru;
 			// TODO: Instead of the above, I am tempted to multiply (positive) cmdline_modifier and mem_modifier by thru.  Maybe original (positive) badness too?  In that case, just multiply the final result, if it is positive.
+			// Make thru curved!
+			//thru = 1.0 - 1.0 / (1.0 + 60.0 * thru);
 
 			if (!get_process_mem_stats(pid, &VmSize, &VmRSS))
 			{
@@ -245,9 +251,10 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 				strcpy(cmdline, name);
 			}
 
-			int modifier = -time_modifier + mem_modifier + cmdline_modifier;
+			int modifier = time_modifier + mem_modifier + cmdline_modifier;
 			if(enable_debug && modifier != 0 || sig == 0)
-				fprintf(stderr, "[%5u] time_running: %4llum (%0.2f) priority: %3ld badness: %3d - %3d + %3d + %3d = %3d cmdline=\"%s\"\n", pid, time_running/60, thru, priority, badness, time_modifier, mem_modifier, cmdline_modifier, badness + modifier, cmdline);
+				fprintf(stderr, "[%5u] time_running: %4llum (%0.2f) priority: %3ld badness: %3d + %3d + %3d + %3d = %3d cmdline=\"%s\"\n", pid, time_running/60, thru, priority, badness, time_modifier, mem_modifier, cmdline_modifier, badness + modifier, cmdline);
+				//fprintf(stderr, "[%5u] time_running: %4llum (%0.2f) priority: %3ld badness: %3d + 0*%3d + %3f*(%3d + %3d) = %3d cmdline=\"%s\"\n", pid, time_running/60, thru, priority, badness, time_modifier, thru, mem_modifier, cmdline_modifier, badness + modifier, cmdline);
 			badness = badness + modifier;
 		}
 
