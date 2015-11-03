@@ -184,8 +184,14 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 		float thru = 0;
 		//if(badness > victim_points || enable_debug)
 		// The above heuristic does not apply now we might increase the badness (preferred_cmdlines_regexp and mem_modifier)
-		// The badness given to us by the system is too dependent on memory usage, and not dependent enough on age!
-		badness = badness / 4;
+		// The badness given to us by the system is too dependent on memory usage, so it isn't very useful to us, since we care more about age!
+		// The system badness *does* contain useful info about though (e.g. if the process marked itself as bad), but we are handling that ourselves via preferred_cmdlines_regexp.
+		//badness = badness / 4;
+		// However this approach is undesirable in the case where no processes are "preferred".  In such situations, we do care about self-marked processes, and less about process age.
+		// Ideally I just want to discount memory usage from the system oom_score.
+		// So we reduce the system p.oom_score but keep p.oom_score_adj (the process's self-marked badness).
+		// To do that we must first discount oom_score_adj from the system oom_score, then restore it afterwards.
+		badness = (p.oom_score - p.oom_score_adj) / 4 + p.oom_score_adj;
 		if (1)
 		{
 			int time_modifier = 0;
