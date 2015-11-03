@@ -242,9 +242,9 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 			}
 
 			// Now the we have checked the cmdline, we make it more appropriate for logging.
-			if (len > 60)
+			if (len > 160)
 			{
-				cmdline[60] = '\0';
+				cmdline[160] = '\0';
 			}
 			// Many processes have an empty cmdline.  So we will display the process name instead.  (Which is usually surrounded by parenthesese.)
 			if (strlen(cmdline) == 0)
