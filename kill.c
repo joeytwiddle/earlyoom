@@ -184,6 +184,8 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 		float thru = 0;
 		//if(badness > victim_points || enable_debug)
 		// The above heuristic does not apply now we might increase the badness (preferred_cmdlines_regexp and mem_modifier)
+		// The badness given to us by the system is too dependent on memory usage, and not dependent enough on age!
+		badness = badness / 4;
 		if (1)
 		{
 			int time_modifier = 0;
@@ -194,7 +196,7 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 			fclose(stat);
 			proc_start_time /= sysconf(_SC_CLK_TCK);
 			long long unsigned int time_running = uptime - proc_start_time;
-			thru = time_running / (float)(60 * 60 * 1);
+			thru = time_running / (float)(60 * 60 * 8);
 			if (thru > 1) {
 				thru = 1;
 			}
@@ -205,7 +207,7 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 			// Curved (exponential?)
 			//time_modifier = 300 - 300.0 / (1.0 + 299 * thru);
 			// Linear
-			time_modifier = 500 * thru;
+			time_modifier = 300 * thru;
 			// TODO: Instead of the above, I am tempted to multiply (positive) cmdline_modifier and mem_modifier by thru.  Maybe original (positive) badness too?  In that case, just multiply the final result, if it is positive.
 			// Make thru curved!
 			//thru = 1.0 - 1.0 / (1.0 + 60.0 * thru);
@@ -218,7 +220,9 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 			//int mem_modifier = VmRSS / 1024;
 			// VmSize: Total memory consumed by process, including RAM, swapped memory, and shared memory (e.g. executable instructions cached on FS, or shared with other processes)
 			// I reduced the score because I didn't find it very helpful.
-			int mem_modifier = VmSize / 1024 / 4 / 2;
+			//int mem_modifier = VmSize / 1024 / 4 / 2;
+			// In fact I find it unhelpful!
+			int mem_modifier = 0;
 
 			int cmdline_modifier = 0;
 			snprintf(buf, PATH_MAX, "%d/cmdline", pid);
@@ -233,7 +237,7 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 			if (regexec(&excluded_cmdlines_regexp, cmdline, (size_t)0, NULL, 0) == 0)
 			{
 				//fprintf(stderr, "Process %i is EXCLUDED!\n", pid, name);
-				cmdline_modifier -= 400;
+				cmdline_modifier -= 300;
 			}
 			if (regexec(&preferred_cmdlines_regexp, cmdline, (size_t)0, NULL, 0) == 0)
 			{
