@@ -217,7 +217,8 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 			// VmRSS: RAM currently consumed by process
 			//int mem_modifier = VmRSS / 1024;
 			// VmSize: Total memory consumed by process, including RAM, swapped memory, and shared memory (e.g. executable instructions cached on FS, or shared with other processes)
-			int mem_modifier = VmSize / 1024 / 4;
+			// I reduced the score because I didn't find it very helpful.
+			int mem_modifier = VmSize / 1024 / 4 / 2;
 
 			int cmdline_modifier = 0;
 			snprintf(buf, PATH_MAX, "%d/cmdline", pid);
