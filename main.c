@@ -16,7 +16,7 @@
 int enable_debug = 0;
 
 // Any process whose cmdline matches this regexp will be LESS likely to be killed.
-char *excluded_cmdlines_pattern = "(^|/)(((init|X|sshd|firefox)( .*|$))|chrome|chromium-browser|chrome.*type=ppapi.*|chromium-browser.*type=ppapi.*)$";
+char *excluded_cmdlines_pattern = "(^|/)(((init|X|sshd|firefox)( .*|$))|chrome|chromium-browser|chrome.* --extension-process .*|chromium-browser.* --extension-process .*)$";
 // (I want to match all init, sshd and firefox processes, but only the INITIAL chrome process.  Chrome tab processes and extension processes will not be protected.)
 
 // Any process whose cmdline matches this regexp will be MORE likely to be killed.
