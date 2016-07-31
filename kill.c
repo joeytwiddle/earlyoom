@@ -13,6 +13,8 @@
 
 #include "kill.h"
 
+#define MAX_BUFFER_SIZE 2040
+
 extern int enable_debug;
 extern regex_t excluded_cmdlines_regexp;
 extern regex_t preferred_cmdlines_regexp;
@@ -76,7 +78,7 @@ void convert_nulls_to_spaces(char *str, int len)
  */
 static struct procinfo get_process_stats(int pid)
 {
-	char buf[256];
+	char buf[MAX_BUFFER_SIZE];
 	FILE * f;
 	struct procinfo p = {0, 0, 0};
 
@@ -141,13 +143,12 @@ static int get_process_mem_stats(int pid, long *VmSize, long *VmRSS)
 static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 {
 	struct dirent * d;
-	char buf[256];
+	char buf[MAX_BUFFER_SIZE];
 	int pid;
 	int victim_pid = 0;
 	int victim_points = 0;
 	char name[PATH_MAX];
-	#define CMDLINE_MAX 250
-	char cmdline[CMDLINE_MAX];
+	char cmdline[MAX_BUFFER_SIZE];
 	struct procinfo p;
 	int badness;
 	long long unsigned int uptime;
@@ -232,7 +233,7 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 
 			int cmdline_modifier = 0;
 			snprintf(buf, PATH_MAX, "%d/cmdline", pid);
-			int len = read_contents_of_file(buf, cmdline, CMDLINE_MAX-1);
+			int len = read_contents_of_file(buf, cmdline, sizeof(cmdline) - 1);
 			convert_nulls_to_spaces(cmdline, len);
 			// Remove the usual trailing space
 			if (cmdline[len-1] == ' ')
