@@ -192,7 +192,7 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 		// Ideally I just want to discount memory usage from the system oom_score.
 		// So we reduce the system p.oom_score but keep p.oom_score_adj (the process's self-marked badness).
 		// To do that we must first discount oom_score_adj from the system oom_score, then restore it afterwards.
-		badness = (p.oom_score - p.oom_score_adj) / 4 + p.oom_score_adj;
+		badness = (p.oom_score - p.oom_score_adj) / 8 + p.oom_score_adj;
 		if (1)
 		{
 			int time_modifier = 0;
