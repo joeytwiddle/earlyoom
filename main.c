@@ -52,7 +52,11 @@ int main(int argc, char *argv[])
 	 * may lag behind stderr */
 	setlinebuf(stdout);
 
-	fprintf(stderr, "earlyoom %s\n", GITVERSION);
+	char *v = VERSION;
+	if(strcmp(v, "")==0) {
+		v = "(unknown version)";
+	}
+	fprintf(stderr, "earlyoom %s\n", v);
 
 	if(chdir("/proc")!=0)
 	{
@@ -68,7 +72,7 @@ int main(int argc, char *argv[])
 	}
 
 	int c;
-	while((c = getopt (argc, argv, "m:s:kidh")) != -1)
+	while((c = getopt (argc, argv, "m:s:kidvh")) != -1)
 	{
 		switch(c)
 		{
@@ -96,6 +100,9 @@ int main(int argc, char *argv[])
 			case 'd':
 				enable_debug = 1;
 				break;
+			case 'v':
+				// The version has already been printed above
+				exit(0);
 			case 'h':
 				fprintf(stderr,
 					"Usage: earlyoom [-m PERCENT] [-s PERCENT] [-k|-i] [-h]\n"
@@ -104,6 +111,7 @@ int main(int argc, char *argv[])
 					"-k ... use kernel oom killer instead of own user-space implementation\n"
 					"-i ... user-space oom killer should ignore positive oom_score_adj values\n"
 					"-d ... enable debugging messages\n"
+					"-v ... print version information and exit\n"
 					"-h ... this help text\n");
 				exit(1);
 			case '?':
@@ -130,11 +138,8 @@ int main(int argc, char *argv[])
 	 */
 	handle_oom(procdir, 0, kernel_oom_killer, ignore_oom_score_adj);
 
-	if(mlockall(MCL_FUTURE)!=0)
-	{
-		perror("Could not lock memory");
-		exit(10);
-	}
+	if(mlockall(MCL_CURRENT|MCL_FUTURE) !=0 )
+		perror("Could not lock memory - continuing anyway");
 
 	c = 1; // Start at 1 so we do not print another status line immediately
 	while(1)
@@ -143,8 +148,13 @@ int main(int argc, char *argv[])
 
 		if(c % 10 == 0)
 		{
-			printf("mem avail: %5lu MiB, swap free: %5lu MiB\n",
-				m.MemAvailable / 1024, m.SwapFree / 1024);
+			int swap_free_percent = 0;
+			if (m.SwapTotal > 0)
+				swap_free_percent = m.SwapFree * 100 / m.SwapTotal;
+
+			printf("mem avail: %lu MiB (%ld %%), swap free: %lu MiB (%d %%)\n",
+				m.MemAvailable / 1024, m.MemAvailable * 100 / m.MemTotal,
+				m.SwapFree / 1024, swap_free_percent);
 			c=0;
 		}
 		c++;
