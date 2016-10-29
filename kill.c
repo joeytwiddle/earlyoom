@@ -13,7 +13,7 @@
 
 #include "kill.h"
 
-#define MAX_BUFFER_SIZE 2040
+#define MAX_BUFFER_SIZE 4000
 
 extern int enable_debug;
 extern regex_t excluded_cmdlines_regexp;
