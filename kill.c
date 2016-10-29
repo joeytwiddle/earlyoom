@@ -138,6 +138,7 @@ static int get_process_mem_stats(int pid, long *VmSize, long *VmRSS)
 	if(fscanf(statm, "%lu %lu", VmSize, VmRSS) < 2)
 	{
 		fprintf(stderr, "Error: Could not parse %s\n", buf);
+		fclose(statm);
 		return 0;
 	}
 	fclose(statm);
