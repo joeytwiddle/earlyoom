@@ -16,12 +16,14 @@
 int enable_debug = 0;
 
 // Any process whose cmdline matches this regexp will be LESS likely to be killed.
-char *excluded_cmdlines_pattern = "(^|/)(((init|X|sshd|firefox)( .*|$))|chrome|chromium-browser|chrome.* --extension-process .*|chromium-browser.* --extension-process .*)$";
-// (I want to match all init, and sshd processes.  And also firefox which is huge, and the INITIAL chrome process because killing that closes the whole session.  I also want to protect Chrome extension processes, but not Chrome tabs/pages.)
+//char *excluded_cmdlines_pattern = "(^|/)(((init|X|sshd|firefox)( .*|$))|chrome|chromium-browser|chrome.* --extension-process .*|chromium-browser.* --extension-process .*)$";
+char *excluded_cmdlines_pattern = "(^|/)(((init|X|sshd)( .*|$))|chrome.* --extension-process .*|chromium-browser.* --extension-process .*)$";
+// (I want to match all init, and sshd processes.  And also Firefox which is huge, and the INITIAL chrome process because killing that closes the whole session.  I also want to protect Chrome extension processes, but not Chrome tabs/pages.)
+// (We don't really need to protect the main Firefox process.  But for Chrome, we do need to protect the extension processes because they get picked up accidentally by the preferred regexp below.)
 
 // Any process whose cmdline matches this regexp will be MORE likely to be killed.
-char *preferred_cmdlines_pattern = "(^|/)(chrome|chromium-browser).*--type=(renderer|gpu-process)";
-// (I want to prioritise Chrome tabs for killing because I tend to have a lot of them open, and they are quite easy to restart with Ctrl-R.  But this pattern also matches Chrome extension processes, so that is why we exclude them in the other regexp, to compensate.)
+char *preferred_cmdlines_pattern = "(^|/)((chrome|chromium-browser).*--type=(renderer|gpu-process)|firefox.* -contentproc)";
+// (I want to prioritise Chrome and Firefox tabs for killing because I tend to have a lot of them open, and they are quite easy to restart with Ctrl-R.  But this pattern also matches Chrome extension processes, so that is why we exclude them in the other regexp, to compensate.)
 
 regex_t excluded_cmdlines_regexp;
 regex_t preferred_cmdlines_regexp;
