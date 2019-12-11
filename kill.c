@@ -277,12 +277,12 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 			if (regexec(&excluded_cmdlines_regexp, cmdline, (size_t)0, NULL, 0) == 0)
 			{
 				//fprintf(stderr, "Process %i is EXCLUDED!\n", pid, name);
-				cmdline_modifier -= 300;
+				cmdline_modifier -= 400;
 			}
 			if (regexec(&preferred_cmdlines_regexp, cmdline, (size_t)0, NULL, 0) == 0)
 			{
 				//fprintf(stderr, "Process %i is PREFERRED!\n", pid, name);
-				cmdline_modifier += 300;
+				cmdline_modifier += 400;
 			}
 
 			// Now the we have checked the cmdline, we make it more appropriate for logging.
