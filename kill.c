@@ -283,6 +283,9 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 			{
 				//fprintf(stderr, "Process %i is PREFERRED!\n", pid, name);
 				cmdline_modifier += 400;
+			} else {
+				// We will only apply the time_modifier to favored processes
+				time_modifier = 0;
 			}
 
 			// Now the we have checked the cmdline, we make it more appropriate for logging.
