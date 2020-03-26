@@ -338,7 +338,7 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 	fclose(stat);
 
 	if(sig != 0)
-		fprintf(stderr, "Killing process %d %s with badness %d time_running=%0.1fm\n", victim_pid, name, victim_badness, time_running/60.0);
+		fprintf(stderr, "Killing process %d %s with badness %d time_running=%0.1fm mem=%ld/%ldMB\n", victim_pid, name, victim_badness, time_running/60.0, VmRSS, VmSize);
 
 	if(kill(victim_pid, sig) != 0)
 	{
