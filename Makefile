@@ -3,7 +3,7 @@ CFLAGS = -Wall -Wextra -DVERSION=\"$(VERSION)\" -g
 
 .PHONY: earlyoom
 earlyoom:
-	$(CC) $(CFLAGS) -o earlyoom main.c meminfo.c kill.c
+	$(CC) $(CFLAGS) -lm -o earlyoom main.c meminfo.c kill.c
 
 clean:
 	rm -f earlyoom

@@ -10,6 +10,7 @@
 #include <limits.h>                     // for PATH_MAX
 #include <unistd.h>
 #include <regex.h>
+#include <math.h>
 
 #include "kill.h"
 
@@ -247,7 +248,9 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 			// Curved (exponential?)
 			//time_modifier = 300 - 300.0 / (1.0 + 299 * thru);
 			// Linear
-			time_modifier = 300 * thru;
+			//time_modifier = 300 * thru;
+			// Curved (exponential)
+			time_modifier = 400 * pow(thru, 1.25);
 			// TODO: Instead of the above, I am tempted to multiply (positive) cmdline_modifier and mem_modifier by thru.  Maybe original (positive) badness too?  In that case, just multiply the final result, if it is positive.
 			// Make thru curved!
 			//thru = 1.0 - 1.0 / (1.0 + 60.0 * thru);
