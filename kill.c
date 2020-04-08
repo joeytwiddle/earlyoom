@@ -233,7 +233,7 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 			snprintf(buf, sizeof(buf), "%d/stat", pid);
 			FILE * stat = fopen(buf, "r");
 			long int priority;
-			fscanf(stat, "%*d %s %*s %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %ld %*d %*d %*d %llu", name, &priority, &proc_start_time);
+			fscanf(stat, "%*d (%[^)]) %*s %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %ld %*d %*d %*d %llu", name, &priority, &proc_start_time);
 			fclose(stat);
 			proc_start_time /= sysconf(_SC_CLK_TCK);
 			long long unsigned int time_running = uptime - proc_start_time;
@@ -338,7 +338,7 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 	snprintf(buf, sizeof(buf), "%d/stat", victim_pid);
 	FILE * stat = fopen(buf, "r");
 	//fscanf(stat, "%*d %s", name);
-	fscanf(stat, "%*d %s %*s %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %llu", name, &proc_start_time);
+	fscanf(stat, "%*d (%[^)]) %*s %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %llu", name, &proc_start_time);
 	proc_start_time /= sysconf(_SC_CLK_TCK);
 	long long unsigned int time_running = uptime - proc_start_time;
 	fclose(stat);
