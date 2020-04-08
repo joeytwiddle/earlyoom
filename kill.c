@@ -309,8 +309,8 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 			badness = badness + modifier;
 		}
 
-		if(enable_debug)
-			printf("pid %5d: badness %3d vm_rss %6lu\n", pid, badness, p.vm_rss);
+		//if(enable_debug)
+			//printf("pid %5d: badness %3d vm_rss %6lu\n", pid, badness, p.vm_rss);
 
 		if(badness > victim_badness)
 		{
@@ -344,7 +344,7 @@ static void userspace_kill(DIR *procdir, int sig, int ignore_oom_score_adj)
 	fclose(stat);
 
 	if(sig != 0)
-		fprintf(stderr, "Killing process %d %s with badness %d time_running=%0.1fm mem=%ld/%ldMB\n", victim_pid, name, victim_badness, time_running/60.0, VmRSS, VmSize);
+		fprintf(stderr, "Killing process %d (%s) with badness %d time_running=%0.1fm mem=%ld/%ldMB\n", victim_pid, name, victim_badness, time_running/60.0, VmRSS, VmSize);
 
 	if(kill(victim_pid, sig) != 0)
 	{
